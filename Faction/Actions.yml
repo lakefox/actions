@@ -1,0 +1,25 @@
+logging:
+  file: ./faction.log
+
+interpreter: bash
+
+actions:
+  create:
+    params:
+      - username
+      - password
+    desc: Create a Linux user with very restricted access
+    script:
+      - useradd %username%
+      - passwd %password%
+      - unshare --user --map-root-user --mount-proc /bin/bash
+
+  disable:
+    params:
+      - username
+    desc: Stop all processes started by a user, log them out and prevent them from trying to log in again.
+    script:
+      - ps aux | grep %username%
+      - killall -u %username%
+      - killall -KILL -u %username%
+      - usermod -s /sbin/nologin  %username%
