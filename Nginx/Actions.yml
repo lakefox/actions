@@ -1,0 +1,78 @@
+logging:
+  file: ./nginx.log
+
+interpreter: bash
+
+permissons:
+  filesystem:
+    root: /
+    allow:
+      - /Desktop
+  network:
+    - port:
+        - $PORT
+
+resources:
+  memory:
+    min: 1
+    max: 2
+
+actions:
+  install:
+    desc: Install and Configure Nginx & Let's Encrypt to port forward your website
+    script:
+      - sudo apt update -y && sudo apt upgrade -y
+      - sudo apt install nginx -y
+      - sudo systemctl start nginx
+      - sudo systemctl enable nginx
+      - sudo ufw allow 'Nginx HTTP'
+      - sudo mkdir -p /var/www/$DOMAIN/html
+      - sudo chown -R $USER:$USER /var/www/$DOMAIN/html
+      - sudo chmod -R 755 /var/www/$DOMAIN
+      - |
+        cat <<EOF > /var/www/$DOMAIN/html/index.html
+        <html>
+        <head>
+        <title>Welcome to $DOMAIN!!</title>
+        </head>
+        <body>
+        <h1>Success!  The example.com server block is $VARTEST!</h1>
+        </body>
+        </html>
+        EOF
+      - |
+        cat <<EOF > /etc/nginx/sites-available/$DOMAIN
+        server {
+          listen 80;
+          listen [::]:80;
+          root /var/www/$DOMAIN/html;
+          index index.html index.htm index.nginx-debian.html;
+          server_name $DOMAIN;
+
+          location / {
+            proxy_pass http://localhost:$PORT;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_cache_bypass $http_upgrade;
+          }
+        }
+        EOF
+      - sudo ln -s /etc/nginx/sites-available/$DOMAIN/etc/nginx/sites-enabled/
+      - sudo apt install certbot python3-certbot-nginx -y
+      - sudo ufw allow 'Nginx Full'
+      - sudo ufw delete allow 'Nginx HTTP'
+      - sudo certbot --nginx -d $DOMAIN -d www.$DOAMIN --register-unsafely-without-email -y
+      - sudo systemctl status certbot.timer
+
+  status:
+    script:
+      - |
+        result=$(systemctl show nginx status | grep -oP 'Result=(\K\w+)' | awk 'NR==1')
+
+        if [ "$result" = "success" ]; then
+            echo 0  # Output 0 if success
+        else
+            echo 2  # Output 2 if not success
+        fi
